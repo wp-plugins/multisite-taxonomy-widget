@@ -3,7 +3,7 @@
 Plugin Name: Multisite Taxonomy Widget
 Plugin URI: http://lloc.de/
 Description: List the latest posts of a specific taxonomy from the whole blog-network 
-Version: 0.2
+Version: 0.3
 Author: Dennis Ploetner 
 Author URI: http://lloc.de/
 */
@@ -19,38 +19,34 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 	}
 
 	public function widget( $args, $instance ) {
-		global $wpdb;
-		extract( $args );
-		$posts = mtw_get_posts( $instance, array() );
-		$blogs = $wpdb->get_col(
-			"SELECT blog_id FROM {$wpdb->blogs} WHERE WHERE blog_id != {$wpdb->blogid} AND WHERE blog_id != {$wpdb->blogid} AND site_id = {$wpdb->siteid} AND spam = 0 AND deleted = 0 AND archived = '0'"
-		);
-		if ( $blogs ) {
-			foreach ( $blogs as $blog_id ) {
-				switch_to_blog( $blog_id );
-				$posts = mtw_get_posts( $instance, $posts );
-				restore_current_blog();
-			}
-		}
-		echo $before_widget;
+		echo $args['before_widget'];
 		$title = apply_filters( 'widget_title', $instance['title'] );
 		if ( $title ) {
-			echo $before_title;
+			echo $args['before_title'];
 			echo $title;
-			echo $after_title;
+			echo $args['after_title'];
 		}
+		$posts = mtw_get_posts_from_blogs( $instance );
 		if ( $posts ) { 
 			echo '<ul>';
 			foreach ( $posts as $post ) {
-				printf(
-					'<li><a href="%s">%s</a></li>',
-					$post->href,
-					$post->title
-				);
+				if ( has_filter( 'mtw_widget_output_filter' ) ) {
+					echo apply_filters( 
+						'mtw_widget_output_filter',
+						$post
+					);
+				}
+				else {
+					printf(
+						'<li><a href="%s">%s</a></li>',
+						$post->post_link,
+						apply_filters( 'the_title', $post->post_title )
+					);
+				}
 			}
 			echo '</ul>';
 		}
-		echo $after_widget;
+		echo $args['after_widget'];
 	}
 
 	public function update( $new_instance, $old_instance ) {
@@ -106,37 +102,50 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 add_action( 'widgets_init', create_function( '', 'register_widget( "MultisiteTaxonomyWidget" );' ) );
 
 function mtw_get_posts( $instance, array $posts ) {
-	extract( $instance );
 	$args  = array(
 		'post_type' => 'any',
 		'tax_query' => array(
 			array(
-				'taxonomy' => $taxonomy,
+				'taxonomy' => $instance['taxonomy'],
 				'field' => 'slug',
-				'terms' => $name,
+				'terms' => sanitize_title( $instance['name'] ),
 			),
 		),
-		'posts_per_page' => $limit,
+		'posts_per_page' => $instance['limit'],
 	);
 	$query = new WP_Query( $args );
 	while ( $query->have_posts() ) {
 		$query->next_post();
-		$temp        = new StdClass;
-		$temp->time  = get_the_time( 'U', $query->post->ID );
-		$temp->title = get_the_title( $query->post->ID );
-		$temp->href  = get_permalink( $query->post->ID );
-		$posts[]     = $temp;
+		$query->post->timestamp = get_the_time( 'U', $query->post->ID );
+		$query->post->post_link = get_permalink( $query->post->ID );
+		$posts[] = $query->post;
 	}
 	usort( $posts, 'mtw_cmp_posts' );
 	wp_reset_query();
 	wp_reset_postdata();
-	return( array_slice( $posts, 0, $limit ) );
+	return( array_slice( $posts, 0, $instance['limit'] ) );
 }
 
 function mtw_cmp_posts( $a, $b ) {
-	if ( $a->time == $b->time )
+	if ( $a->timestamp == $b->timestamp )
 		return 0;
-	return( $a->time > $b->time ) ? (-1) : 1;
+	return( $a->timestamp > $b->timestamp ? (-1) : 1 );
+}
+
+function mtw_get_posts_from_blogs( $instance ) {
+	global $wpdb;
+	$posts = mtw_get_posts( $instance, array() );
+	$blogs = $wpdb->get_col(
+		"SELECT blog_id FROM {$wpdb->blogs} WHERE blog_id != {$wpdb->blogid} AND site_id = {$wpdb->siteid} AND spam = 0 AND deleted = 0 AND archived = '0'"
+	);
+	if ( $blogs ) {
+		foreach ( $blogs as $blog_id ) {
+			switch_to_blog( $blog_id );
+			$posts = mtw_get_posts( $instance, $posts );
+			restore_current_blog();
+		}
+	}
+	return $posts;
 }
 
 function mtw_plugin_init() {
@@ -146,4 +155,30 @@ function mtw_plugin_init() {
 		dirname( plugin_basename( __FILE__ ) ) . '/languages/'
 	);
 }
-add_action( 'admin_init', 'mtw_plugin_init' );
+add_action( 'init', 'mtw_plugin_init' );
+
+function mtw_create_shortcode( $atts ) {
+	$posts = mtw_get_posts_from_blogs( $atts );
+	$content = '';
+	if ( $posts ) {
+		$content = '<ul>';
+		foreach ( $posts as $post ) {
+			if ( has_filter( 'mtw_shortcode_output_filter' ) ) {
+				$content .= apply_filters( 
+					'mtw_shortcode_output_filter',
+					$post
+				);
+			}
+			else {
+				$content .= sprintf(
+					'<li><a href="%s">%s</a></li>',
+					$post->post_link,
+					apply_filters( 'the_title', $post->post_title )
+				);
+			}
+		}
+		$content .= '</ul>';
+	}
+	return $content;
+}
+add_shortcode( 'mtw_posts', 'mtw_create_shortcode' );
