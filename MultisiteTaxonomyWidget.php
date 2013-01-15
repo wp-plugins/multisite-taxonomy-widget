@@ -3,7 +3,7 @@
 Plugin Name: Multisite Taxonomy Widget
 Plugin URI: http://lloc.de/
 Description: List the latest posts of a specific taxonomy from the whole blog-network 
-Version: 0.3
+Version: 0.4
 Author: Dennis Ploetner 
 Author URI: http://lloc.de/
 */
@@ -30,19 +30,23 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 		if ( $posts ) { 
 			echo '<ul>';
 			foreach ( $posts as $post ) {
+				echo '<li>';
 				if ( has_filter( 'mtw_widget_output_filter' ) ) {
-					echo apply_filters( 
+					echo apply_filters(
 						'mtw_widget_output_filter',
-						$post
+						$post,
+						$instance
 					);
 				}
 				else {
 					printf(
-						'<li><a href="%s">%s</a></li>',
-						$post->post_link,
+						'%s <a href="%s">%s</a>',
+						mtw_get_thumbnail( $post, $instance ),
+						$post->mtw_href,
 						apply_filters( 'the_title', $post->post_title )
 					);
 				}
+				echo '</li>';
 			}
 			echo '</ul>';
 		}
@@ -50,26 +54,27 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 	}
 
 	public function update( $new_instance, $old_instance ) {
-		$instance             = $old_instance;
-		$instance['title']    = strip_tags( $new_instance['title'] );
-		$instance['taxonomy'] = strip_tags( $new_instance['taxonomy'] );
-		$instance['name']     = strip_tags( $new_instance['name'] );
-		$instance['limit']    = (int) $new_instance['limit'];
+		$instance              = $old_instance;
+		$instance['title']     = strip_tags( $new_instance['title'] );
+		$instance['taxonomy']  = strip_tags( $new_instance['taxonomy'] );
+		$instance['name']      = strip_tags( $new_instance['name'] );
+		$instance['limit']     = (int) $new_instance['limit'];
+		$instance['thumbnail'] = (int) $new_instance['thumbnail'];
 		return $instance;
 	}
 
 	public function form( $instance ) {
 		printf(
-			'<p><label for="%1$s">%2$s</label> <input class="widefat" id="%1$s" name="%3$s" type="text" value="%4$s" /></p>',
+			'<p><label for="%1$s">%2$s:</label> <input class="widefat" id="%1$s" name="%3$s" type="text" value="%4$s" /></p>',
 			$this->get_field_id( 'title' ),
-			__( 'Title:', 'mtw' ),
+			__( 'Title', 'mtw' ),
 			$this->get_field_name( 'title' ),
 			( isset( $instance['title'] ) ? esc_attr( $instance['title'] ) : '' )
 		);
 		printf(
-			'<p><label for="%1$s">%2$s</label> <select id="%1$s" name="%3$s">',
+			'<p><label for="%1$s">%2$s:</label> <select class="widefat" id="%1$s" name="%3$s">',
 			$this->get_field_id( 'taxonomy' ),
-			__( 'Taxonomy:', 'mtw' ),
+			__( 'Taxonomy', 'mtw' ),
 			$this->get_field_name( 'taxonomy' )
 		);
 		$taxonomies = get_taxonomies( array( 'public' => true ), 'objects' ); 
@@ -83,18 +88,25 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 		}
 		echo '</select></p>';
 		printf(
-			'<p><label for="%1$s">%2$s</label> <input class="widefat" id="%1$s" name="%3$s" type="text" value="%4$s" /></p>',
+			'<p><label for="%1$s">%2$s:</label> <input class="widefat" id="%1$s" name="%3$s" type="text" value="%4$s" /></p>',
 			$this->get_field_id( 'name' ),
-			__( 'Name:', 'mtw' ),
+			__( 'Name', 'mtw' ),
 			$this->get_field_name( 'name' ),
 			( isset( $instance['name'] ) ? esc_attr( $instance['name'] ) : '' )
 		);
 		printf(
-			'<p><label for="%1$s">%2$s</label> <input class="widefat" id="%1$s" name="%3$s" type="text" value="%4$s" /></p>',
+			'<p><label for="%1$s">%2$s:</label> <input class="widefat" id="%1$s" name="%3$s" type="text" value="%4$s" /></p>',
 			$this->get_field_id( 'limit' ),
-			__( 'Limit:', 'mtw' ),
+			__( 'Limit', 'mtw' ),
 			$this->get_field_name( 'limit' ),
 			( isset( $instance['limit'] ) ? (int) $instance['limit'] : 10 )
+		);
+		printf(
+			'<p><label for="%1$s">%2$s:</label> <input class="widefat" id="%1$s" name="%3$s" type="text" value="%4$s" /></p>',
+			$this->get_field_id( 'thumbnail' ),
+			__( 'Thumbnail', 'mtw' ),
+			$this->get_field_name( 'thumbnail' ),
+			( isset( $instance['thumbnail'] ) ? (int) $instance['thumbnail'] : 0 )
 		);
 	}
 
@@ -113,11 +125,16 @@ function mtw_get_posts( $instance, array $posts ) {
 		),
 		'posts_per_page' => $instance['limit'],
 	);
-	$query = new WP_Query( $args );
+	$query   = new WP_Query( $args );
+	$ts_size = ( !empty( $instance['thumbnail'] ) ?
+		array( $instance['thumbnail'], $instance['thumbnail'] ) :
+		'thumbnail'
+	);
 	while ( $query->have_posts() ) {
 		$query->next_post();
-		$query->post->timestamp = get_the_time( 'U', $query->post->ID );
-		$query->post->post_link = get_permalink( $query->post->ID );
+		$query->post->mtw_ts    = get_the_time( 'U', $query->post->ID );
+		$query->post->mtw_href  = get_permalink( $query->post->ID );
+		$query->post->mtw_thumb = get_the_post_thumbnail( $query->post->ID, $ts_size );
 		$posts[] = $query->post;
 	}
 	usort( $posts, 'mtw_cmp_posts' );
@@ -127,9 +144,9 @@ function mtw_get_posts( $instance, array $posts ) {
 }
 
 function mtw_cmp_posts( $a, $b ) {
-	if ( $a->timestamp == $b->timestamp )
+	if ( $a->mtw_ts == $b->mtw_ts )
 		return 0;
-	return( $a->timestamp > $b->timestamp ? (-1) : 1 );
+	return( $a->mtw_ts > $b->mtw_ts ? (-1) : 1 );
 }
 
 function mtw_get_posts_from_blogs( $instance ) {
@@ -158,27 +175,49 @@ function mtw_plugin_init() {
 add_action( 'init', 'mtw_plugin_init' );
 
 function mtw_create_shortcode( $atts ) {
-	$posts = mtw_get_posts_from_blogs( $atts );
+	$posts   = mtw_get_posts_from_blogs( $atts );
 	$content = '';
 	if ( $posts ) {
 		$content = '<ul>';
 		foreach ( $posts as $post ) {
+			$content .= '<li>';
 			if ( has_filter( 'mtw_shortcode_output_filter' ) ) {
-				$content .= apply_filters( 
+				$content .= apply_filters(
 					'mtw_shortcode_output_filter',
-					$post
+					$post,
+					$atts
 				);
 			}
 			else {
 				$content .= sprintf(
-					'<li><a href="%s">%s</a></li>',
-					$post->post_link,
+					'%s <a href="%s">%s</a>',
+					mtw_get_thumbnail( $post, $atts ),
+					$post->mtw_href,
 					apply_filters( 'the_title', $post->post_title )
 				);
 			}
+			$content .= '</li>';
 		}
 		$content .= '</ul>';
 	}
 	return $content;
 }
 add_shortcode( 'mtw_posts', 'mtw_create_shortcode' );
+
+function mtw_get_thumbnail( $post, $atts ) {
+	if ( !empty( $atts['thumbnail'] ) ) {
+		if ( has_filter( 'mtw_thumbnail_output_filter' ) ) {
+			return apply_filters(
+				'mtw_thumbnail_output_filter',
+				$post,
+				$atts
+			);
+		}
+		return sprintf(
+			'<a href="%s">%s</a>',
+			$post->mtw_href,
+			$post->mtw_thumb
+		);
+	}
+	return '';
+}
