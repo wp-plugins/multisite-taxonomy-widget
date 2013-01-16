@@ -4,7 +4,7 @@ Donate link: http://www.greenpeace.org/international/en/supportus/
 Tags: multisite, recent posts, taxonomy, category, tag, widget
 Requires at least: 3.2.1
 Tested up to: 3.6
-Stable tag: 0.4
+Stable tag: 0.5
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -24,6 +24,9 @@ built-in or custom taxonomy.
 4. Place the Multisite Taxonomy Widget in any widgetized area or use the shortcode [mtw_posts]
 
 == Changelog ==
+
+= 0.5 =
+* Filter added: You can override the tags used for the list output using `mtw_formatelements_output_filter`.
 
 = 0.4 =
 * Thumbnails to the output added
