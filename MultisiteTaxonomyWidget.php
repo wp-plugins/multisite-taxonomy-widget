@@ -1,9 +1,9 @@
 <?php
 /*
 Plugin Name: Multisite Taxonomy Widget
-Plugin URI: http://lloc.de/
+Plugin URI: https://github.com/lloc/Multisite-Taxonomy-Widget
 Description: List the latest posts of a specific taxonomy from your blog-network.
-Version: 0.4
+Version: 0.6
 Author: Dennis Ploetner 
 Author URI: http://lloc.de/
 */
@@ -19,6 +19,7 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 	}
 
 	public function widget( $args, $instance ) {
+		$args = mtw_get_formatelements( $args );
 		echo $args['before_widget'];
 		$title = apply_filters( 'widget_title', $instance['title'] );
 		if ( $title ) {
@@ -28,9 +29,9 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 		}
 		$posts = mtw_get_posts_from_blogs( $instance );
 		if ( $posts ) { 
-			echo '<ul>';
+			echo $args['before_mtw_list'];
 			foreach ( $posts as $post ) {
-				echo '<li>';
+				echo $args['before_mtw_item'];
 				if ( has_filter( 'mtw_widget_output_filter' ) ) {
 					echo apply_filters(
 						'mtw_widget_output_filter',
@@ -46,20 +47,25 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 						apply_filters( 'the_title', $post->post_title )
 					);
 				}
-				echo '</li>';
+				echo $args['after_mtw_item'];
 			}
-			echo '</ul>';
+			echo $args['after_mtw_list'];
 		}
 		echo $args['after_widget'];
 	}
 
 	public function update( $new_instance, $old_instance ) {
-		$instance              = $old_instance;
-		$instance['title']     = strip_tags( $new_instance['title'] );
-		$instance['taxonomy']  = strip_tags( $new_instance['taxonomy'] );
-		$instance['name']      = strip_tags( $new_instance['name'] );
-		$instance['limit']     = (int) $new_instance['limit'];
-		$instance['thumbnail'] = (int) $new_instance['thumbnail'];
+		$instance = $old_instance;
+
+		$instance['title']    = strip_tags( $new_instance['title'] );
+		$instance['taxonomy'] = strip_tags( $new_instance['taxonomy'] );
+		$instance['name']     = strip_tags( $new_instance['name'] );
+
+		$temp              = (int) $new_instance['limit'];
+		$instance['limit'] = ( $temp > 0 || $temp == -1 ? $temp : 10 );
+
+		$temp                  = (int) $new_instance['thumbnail'];
+		$instance['thumbnail'] = ( $temp >= 0 ? $temp : 0 );
 		return $instance;
 	}
 
@@ -118,7 +124,7 @@ function mtw_get_posts( $instance, array $posts ) {
 		'post_type' => 'any',
 		'tax_query' => array(
 			array(
-				'taxonomy' => $instance['taxonomy'],
+				'taxonomy' => sanitize_title( $instance['taxonomy'] ),
 				'field' => 'slug',
 				'terms' => sanitize_title( $instance['name'] ),
 			),
@@ -127,7 +133,7 @@ function mtw_get_posts( $instance, array $posts ) {
 	);
 	$query   = new WP_Query( $args );
 	$ts_size = ( !empty( $instance['thumbnail'] ) ?
-		array( $instance['thumbnail'], $instance['thumbnail'] ) :
+		array( (int) $instance['thumbnail'], (int) $instance['thumbnail'] ) :
 		'thumbnail'
 	);
 	while ( $query->have_posts() ) {
@@ -204,7 +210,7 @@ function mtw_create_shortcode( $atts ) {
 }
 add_shortcode( 'mtw_posts', 'mtw_create_shortcode' );
 
-function mtw_get_thumbnail( $post, $atts ) {
+function mtw_get_thumbnail( $post, array $atts ) {
 	if ( !empty( $atts['thumbnail'] ) ) {
 		if ( has_filter( 'mtw_thumbnail_output_filter' ) ) {
 			return apply_filters(
@@ -220,4 +226,17 @@ function mtw_get_thumbnail( $post, $atts ) {
 		);
 	}
 	return '';
+}
+
+/**
+ * Get formatelements
+ * @param array $args
+ * return array
+ */ 
+function mtw_get_formatelements( array $args ) {
+	$args['before_mtw_list'] = '<ul>';
+	$args['after_mtw_list']  = '</ul>';
+	$args['before_mtw_item'] = '<li>';
+	$args['after_mtw_item']  = '</li>';
+	return apply_filters( 'mtw_formatelements_output_filter', $args );
 }
