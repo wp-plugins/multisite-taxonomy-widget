@@ -1,9 +1,9 @@
 <?php
 /*
 Plugin Name: Multisite Taxonomy Widget
-Plugin URI: http://lloc.de/
+Plugin URI: https://github.com/lloc/Multisite-Taxonomy-Widget
 Description: List the latest posts of a specific taxonomy from your blog-network.
-Version: 0.5
+Version: 0.6
 Author: Dennis Ploetner 
 Author URI: http://lloc.de/
 */
@@ -55,12 +55,17 @@ class MultisiteTaxonomyWidget extends WP_Widget {
 	}
 
 	public function update( $new_instance, $old_instance ) {
-		$instance              = $old_instance;
-		$instance['title']     = strip_tags( $new_instance['title'] );
-		$instance['taxonomy']  = strip_tags( $new_instance['taxonomy'] );
-		$instance['name']      = strip_tags( $new_instance['name'] );
-		$instance['limit']     = (int) $new_instance['limit'];
-		$instance['thumbnail'] = (int) $new_instance['thumbnail'];
+		$instance = $old_instance;
+
+		$instance['title']    = strip_tags( $new_instance['title'] );
+		$instance['taxonomy'] = strip_tags( $new_instance['taxonomy'] );
+		$instance['name']     = strip_tags( $new_instance['name'] );
+
+		$temp              = (int) $new_instance['limit'];
+		$instance['limit'] = ( $temp > 0 || $temp == -1 ? $temp : 10 );
+
+		$temp                  = (int) $new_instance['thumbnail'];
+		$instance['thumbnail'] = ( $temp >= 0 ? $temp : 0 );
 		return $instance;
 	}
 
@@ -119,7 +124,7 @@ function mtw_get_posts( $instance, array $posts ) {
 		'post_type' => 'any',
 		'tax_query' => array(
 			array(
-				'taxonomy' => $instance['taxonomy'],
+				'taxonomy' => sanitize_title( $instance['taxonomy'] ),
 				'field' => 'slug',
 				'terms' => sanitize_title( $instance['name'] ),
 			),
@@ -128,7 +133,7 @@ function mtw_get_posts( $instance, array $posts ) {
 	);
 	$query   = new WP_Query( $args );
 	$ts_size = ( !empty( $instance['thumbnail'] ) ?
-		array( $instance['thumbnail'], $instance['thumbnail'] ) :
+		array( (int) $instance['thumbnail'], (int) $instance['thumbnail'] ) :
 		'thumbnail'
 	);
 	while ( $query->have_posts() ) {
@@ -223,6 +228,11 @@ function mtw_get_thumbnail( $post, array $atts ) {
 	return '';
 }
 
+/**
+ * Get formatelements
+ * @param array $args
+ * return array
+ */ 
 function mtw_get_formatelements( array $args ) {
 	$args['before_mtw_list'] = '<ul>';
 	$args['after_mtw_list']  = '</ul>';
